@@ -1,0 +1,318 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Backpack = LocalPlayer:WaitForChild("Backpack")
+
+-- الأداة المجهزة حالياً
+local EquippedTool = nil
+
+-- البحث عن أداة "كلبشه"
+local function findTool(toolName)
+    local tool = Backpack:FindFirstChild(toolName)
+    if not tool then
+        -- نحاول نلگاها بالظهر
+        tool = Backpack:WaitForChild(toolName, 5) -- انتظار 5 ثواني
+    end
+    return tool
+end
+
+-- الحصول على الأداة إذا كانت باليد
+local function getEquippedTool()
+    if LocalPlayer.Character then
+        for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
+            if item:IsA("Tool") and item.Name:lower():find("كلبشه") then
+                return item
+            end
+        end
+    end
+    return nil
+end
+
+-- التأكد من تجهيز الأداة
+local function ensureToolEquipped()
+    local tool = getEquippedTool()
+    if tool then
+        EquippedTool = tool
+        return true
+    end
+    
+    local backpackTool = findTool("كلبشه")
+    if backpackTool and LocalPlayer.Character then
+        LocalPlayer.Character:WaitForChild("Humanoid"):EquipTool(backpackTool)
+        EquippedTool = backpackTool
+        return true
+    end
+    
+    EquippedTool = nil
+    return false
+end
+
+local bodyParts = {
+    "Head", "HumanoidRootPart", "LeftUpperArm", "RightUpperArm",
+    "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg",
+    "LeftLowerLeg", "RightLowerLeg", "Torso"
+}
+
+-- تخزين اللاعبين المقيدين
+local cuffedPlayers = {}
+local nextIndex = 1
+
+-- تقييد (كلبشة) اللاعب
+local function cuffPlayer(player)
+    if player and player.Character and ensureToolEquipped() and EquippedTool then
+        local remoteEvent = EquippedTool:FindFirstChild("RemoteEvent")
+        if not remoteEvent then warn("ما لگينا RemoteEvent بالأداة"); return false end
+
+        for _, partName in pairs(bodyParts) do
+            local part = player.Character:FindFirstChild(partName)
+            if part then
+                remoteEvent:FireServer("Cuff", part)
+                wait(0.05)
+            end
+        end
+        return true
+    end
+    return false
+end
+
+-- تحرير اللاعب
+local function uncuffPlayer(player)
+    if player and player.Character and ensureToolEquipped() and EquippedTool then
+        local remoteEvent = EquippedTool:FindFirstChild("RemoteEvent")
+        if remoteEvent then
+            remoteEvent:FireServer("UnCuff", player.Character)
+            return true
+        else
+            warn("ما لگينا RemoteEvent بالأداة")
+        end
+    end
+    return false
+end
+
+-- بناء واجهة المستخدم (GUI)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MOGGEDCuffControl"
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 220, 0, 160)
+MainFrame.Position = UDim2.new(1, -230, 0, 10)
+MainFrame.AnchorPoint = Vector2.new(1, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 10)
+UICorner.Parent = MainFrame
+
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 32)
+TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = TitleBar
+
+local TitleText = Instance.new("TextLabel")
+TitleText.Size = UDim2.new(1, -40, 1, 0)
+TitleText.Position = UDim2.new(0, 10, 0, 0)
+TitleText.BackgroundTransparency = 1
+TitleText.Text = "**MOGGED🏴‍☠️ - تحكم الكلبشه**"
+TitleText.TextColor3 = Color3.fromRGB(220, 220, 220)
+TitleText.TextSize = 14
+TitleText.Font = Enum.Font.GothamBold
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+TitleText.Parent = TitleBar
+
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 30, 1, 0)
+CloseButton.Position = UDim2.new(1, -30, 0, 0)
+CloseButton.BackgroundTransparency = 1
+CloseButton.Text = "X"
+CloseButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+CloseButton.TextSize = 16
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Parent = TitleBar
+
+local CuffButton = Instance.new("TextButton")
+CuffButton.Size = UDim2.new(0.85, 0, 0, 40)
+CuffButton.Position = UDim2.new(0.075, 0, 0.25, 0)
+CuffButton.Text = "**تقييد اللاعب**"
+CuffButton.BackgroundColor3 = Color3.fromRGB(0, 100, 255)
+CuffButton.TextColor3 = Color3.new(1, 1, 1)
+CuffButton.TextSize = 14
+CuffButton.Font = Enum.Font.GothamBold
+CuffButton.Parent = MainFrame
+
+local CuffCorner = Instance.new("UICorner")
+CuffCorner.CornerRadius = UDim.new(0, 8)
+CuffCorner.Parent = CuffButton
+
+local UnCuffButton = Instance.new("TextButton")
+UnCuffButton.Size = UDim2.new(0.85, 0, 0, 40)
+UnCuffButton.Position = UDim2.new(0.075, 0, 0.6, 0)
+UnCuffButton.Text = "**تحرير اللاعب**"
+UnCuffButton.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+UnCuffButton.TextColor3 = Color3.new(1, 1, 1)
+UnCuffButton.TextSize = 14
+UnCuffButton.Font = Enum.Font.GothamBold
+UnCuffButton.Parent = MainFrame
+
+local UnCuffCorner = Instance.new("UICorner")
+UnCuffCorner.CornerRadius = UDim.new(0, 8)
+UnCuffCorner.Parent = UnCuffButton
+
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Size = UDim2.new(1, -20, 0, 20)
+TargetLabel.Position = UDim2.new(0, 10, 0, 35)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.Text = "اللاعب المستهدف: لا أحد"
+TargetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+TargetLabel.TextSize = 12
+TargetLabel.Font = Enum.Font.Gotham
+TargetLabel.Parent = MainFrame
+
+local ToolStatusLabel = Instance.new("TextLabel")
+ToolStatusLabel.Size = UDim2.new(1, -20, 0, 20)
+ToolStatusLabel.Position = UDim2.new(0, 10, 0, 100)
+ToolStatusLabel.BackgroundTransparency = 1
+ToolStatusLabel.Text = "حالة الأداة: جاهزة"
+ToolStatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+ToolStatusLabel.TextSize = 12
+ToolStatusLabel.Font = Enum.Font.Gotham
+ToolStatusLabel.Parent = MainFrame
+
+-- تأثيرات الحركات (Hover Effects)
+local function createHoverEffect(button, normalColor, hoverColor)
+    button.MouseEnter:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = hoverColor}):Play()
+    end)
+    button.MouseLeave:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = normalColor}):Play()
+    end)
+end
+
+createHoverEffect(CuffButton, Color3.fromRGB(0, 100, 255), Color3.fromRGB(20, 120, 255))
+createHoverEffect(UnCuffButton, Color3.fromRGB(220, 60, 60), Color3.fromRGB(240, 70, 70))
+
+-- وظيفة الحصول على اللاعب التالي
+local function getNextPlayer()
+    local allPlayers = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            table.insert(allPlayers, player)
+        end
+    end
+    
+    if #allPlayers == 0 then return nil end
+    
+    local target = allPlayers[nextIndex]
+    nextIndex = nextIndex % #allPlayers + 1
+    return target
+end
+
+-- وظيفة تحديث مؤشر اللاعب المستهدف
+local function updateTargetLabel()
+    local target = getNextPlayer()
+    TargetLabel.Text = "اللاعب المستهدف: " .. (target and target.Name or "لا أحد")
+end
+
+-- وظيفة تحديث حالة الأداة
+local function updateToolStatus(text, color)
+    ToolStatusLabel.Text = "حالة الأداة: " .. text
+    ToolStatusLabel.TextColor3 = color
+end
+
+-- النقر على زر التقييد
+CuffButton.MouseButton1Click:Connect(function()
+    local target = getNextPlayer()
+    if not target then return end
+    
+    if ensureToolEquipped() then
+        updateToolStatus("قيد الاستخدام", Color3.fromRGB(255, 200, 0))
+        
+        if cuffPlayer(target) then
+            cuffedPlayers[target] = true
+            updateTargetLabel()
+            
+            local originalColor = CuffButton.BackgroundColor3
+            TweenService:Create(CuffButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 200, 0)}):Play()
+            delay(0.3, function()
+                TweenService:Create(CuffButton, TweenInfo.new(0.2), {BackgroundColor3 = originalColor}):Play()
+            end)
+            
+            updateToolStatus("جاهزة", Color3.fromRGB(0, 200, 0))
+        else
+            updateToolStatus("فشل في التقييد", Color3.fromRGB(255, 0, 0))
+        end
+    else
+        updateToolStatus("غير متوفرة", Color3.fromRGB(255, 0, 0))
+    end
+end)
+
+-- النقر على زر التحرير
+UnCuffButton.MouseButton1Click:Connect(function()
+    if ensureToolEquipped() then
+        updateToolStatus("قيد الاستخدام", Color3.fromRGB(255, 200, 0))
+        
+        for player, _ in pairs(cuffedPlayers) do
+            if uncuffPlayer(player) then
+                cuffedPlayers[player] = nil
+                
+                local originalColor = UnCuffButton.BackgroundColor3
+                TweenService:Create(UnCuffButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 200, 0)}):Play()
+                delay(0.3, function()
+                    TweenService:Create(UnCuffButton, TweenInfo.new(0.2), {BackgroundColor3 = originalColor}):Play()
+                end)
+                
+                updateToolStatus("جاهزة", Color3.fromRGB(0, 200, 0))
+                break
+            else
+                updateToolStatus("فشل في التحرير", Color3.fromRGB(255, 0, 0))
+            end
+        end
+    else
+        updateToolStatus("غير متوفرة", Color3.fromRGB(255, 0, 0))
+    end
+    updateTargetLabel()
+end)
+
+-- زر الإغلاق
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+-- تحديث اللاعبين
+Players.PlayerAdded:Connect(updateTargetLabel)
+Players.PlayerRemoving:Connect(updateTargetLabel)
+
+-- التحقق من توفر الأداة بشكل دوري
+local function checkToolAvailability()
+    if not EquippedTool or not EquippedTool.Parent then
+        if ensureToolEquipped() then
+            updateToolStatus("جاهزة", Color3.fromRGB(0, 200, 0))
+        else
+            updateToolStatus("غير متوفرة", Color3.fromRGB(255, 0, 0))
+        end
+    end
+end
+
+-- التهيئة
+updateTargetLabel()
+checkToolAvailability()
+
+-- حلقة التحقق الدورية
+spawn(function()
+    while wait(3) do
+        checkToolAvailability()
+    end
+end)
