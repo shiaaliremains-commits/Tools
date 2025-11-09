@@ -1,6 +1,6 @@
--- [[ MafiaAlJalab Universal Hitbox System V11.0 - Keyboard Only (Final Reliable) ]]
--- Hitbox محسّن لجميع اللاعبين + ESP متكامل. يعتمد فقط على Keybind H.
--- [[ تم التعديل بواسطة Gemini - تعديل نص الزر (الأخير) ]]
+-- [[ MafiaAlJalab Universal Hitbox System V11.0 - (ESP بدون اسم) ]]
+-- Hitbox محسّن لجميع اللاعبين + ESP (بوكس وهايلايت فقط).
+-- [[ تم التعديل بواسطة Gemini - إزالة الاسم من الـ ESP ]]
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -257,7 +257,6 @@ local function createToggleButton()
     buttonText.Size = UDim2.new(1, 0, 1, 0)
     buttonText.BackgroundTransparency = 1
     
-    -- [[ ⭐️⭐️ التعديل الرابع: تغيير النص الأولي للزر ⭐️⭐️ ]]
     buttonText.Text = "Hitbox - Head"
     
     buttonText.TextColor3 = Color3.fromRGB(255, 100, 100) 
@@ -285,7 +284,6 @@ local function updateToggleButton()
         local textLabel = toggleButton:FindFirstChildOfClass("TextLabel")
         if textLabel then
             
-            -- [[ ⭐️⭐️ التعديل الرابع: تغيير نص الزر عند التبديل ⭐️⭐️ ]]
             if HitboxTargetPart == "Head" then
                 textLabel.Text = "Hitbox - Head"
                 textLabel.TextColor3 = Color3.fromRGB(255, 100, 100) -- أحمر
@@ -367,6 +365,7 @@ local function destroyESPOne(player)
     end 
 end
 
+-- ⭐️⭐️⭐️ تم التعديل هنا ⭐️⭐️⭐️
 local function createBoxESP(player, espColor) 
     local character = player.Character
     local rootPart = getRootPart(character)
@@ -390,25 +389,13 @@ local function createBoxESP(player, espColor)
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Parent = ESPFolder
     
-    local billboard = Instance.new("BillboardGui")
-    billboard.Adornee = rootPart
-    billboard.Size = UDim2.new(0, 150, 0, 20) 
-    billboard.AlwaysOnTop = true
-    billboard.StudsOffset = Vector3.new(0, 3.5, 0) 
-    billboard.Parent = ESPFolder
+    -- [[ تم حذف الـ BillboardGui (الاسم) حسب طلبك ]]
     
-    local nameLabel = Instance.new("TextLabel", billboard)
-    nameLabel.Size = UDim2.new(1, 0, 1, 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = player.Name .. " [HITBOX - " .. HitboxTargetPart:upper() .. "]" 
-    nameLabel.TextColor3 = espColor
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextSize = 14
-    nameLabel.TextStrokeTransparency = 0.5
-    
-    return {Box = box, Highlight = highlight, NameTag = billboard, Label = nameLabel}
+    -- [[ تم تعديل الـ return ليطابق الحذف ]]
+    return {Box = box, Highlight = highlight}
 end
 
+-- ⭐️⭐️⭐️ وتم التعديل هنا ⭐️⭐️⭐️
 local function updateESP(espObjects, player) 
     local isVisible = isPlayerVisible(player)
     local espColor = isVisible and ESPColorVisible or ESPColorHidden
@@ -419,19 +406,12 @@ local function updateESP(espObjects, player)
         espObjects.Highlight.OutlineColor = espColor 
     end
     
-    if espObjects.Label and espObjects.Label.Parent then
-        espObjects.Label.TextColor3 = espColor
-        
-        -- [[ ⭐️⭐️ التعديل الرابع: تغيير نص الـ ESP (اختياري بس أفضل) ⭐️⭐️ ]]
-        -- هذا يخلي علامة الـ ESP هم تتغير ويا الزر
-        local currentModeText = HitboxTargetPart == "Head" and "HEAD" or "TORSO"
-        espObjects.Label.Text = player.Name .. " [HITBOX - " .. currentModeText .. "]" 
-    end
+    -- [[ تم حذف كود تحديث الاسم واللون مالته ]]
     
     local newRoot = getRootPart(player.Character)
     if newRoot then
          if espObjects.Box.Adornee ~= newRoot then espObjects.Box.Adornee = newRoot end
-         if espObjects.NameTag.Adornee ~= newRoot then espObjects.NameTag.Adornee = newRoot end
+         -- [[ تم حذف سطر تحديث Adornee للـ NameTag ]]
     end
 end
 
@@ -504,10 +484,10 @@ local function initialize()
 
     refreshAllHitboxes("Head") 
 
-    print("[MafiaAlJalab Universal Hitbox V11.0 - Final Patch] Activated Successfully!")
+    print("[MafiaAlJalab Universal Hitbox V11.0 - ESP No-Name Mod] Activated!")
     print("✨ Initial Hitbox Mode: Head (Toggle with H)")
     print("🖱️ Toggle Button: Created (Click to switch) - Text Fixed")
-    print("📊 ESP System: Active")
+    print("📊 ESP System: Active (No Names)")
     print("🔫 Hit Detection: Active (Patched for all parts + CanCollide Fixed)")
 end
 
