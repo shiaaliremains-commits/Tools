@@ -1,6 +1,6 @@
--- [[ MafiaAlJalab Universal Hitbox System V11.0 - (ESP بدون اسم) ]]
--- Hitbox محسّن لجميع اللاعبين + ESP (بوكس وهايلايت فقط).
--- [[ تم التعديل بواسطة Gemini - إزالة الاسم من الـ ESP ]]
+-- [[ MafiaAlJalab Universal Hitbox System V11.0 - (ESP بدون اسم + نظام الفرق) ]]
+-- Hitbox محسّن و ESP (بوكس وهايلايت) فقط للاعبين الأعداء.
+-- [[ تم التعديل بواسطة Gemini - إضافة نظام الفرق + تنظيف الكاش المستمر ]]
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -8,13 +8,19 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService") 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
+local ReplicatedStorage = game:GetService("ReplicatedStorage") -- ⭐️
+
+-- ⭐️ إعدادات الفرق (حسب المسارات اللي طلبتها) ⭐️
+local TeamsFolder = ReplicatedStorage:WaitForChild("Teams")
+local TeamT = TeamsFolder:WaitForChild("T")
+local TeamCT = TeamsFolder:WaitForChild("CT")
 
 -- إعدادات Hitbox لجميع اللاعبين
-local HEAD_SIZE = Vector3.new(5, 5, 5)   -- حجم الرأس
+local HEAD_SIZE = Vector3.new(5, 5, 5)
 local HEAD_COLOR = Color3.fromRGB(255, 100, 100) 
 local HEAD_TRANSPARENCY = 0.5            
 
-local TORSO_SIZE = Vector3.new(4, 5, 2)   -- حجم الصدر
+local TORSO_SIZE = Vector3.new(4, 5, 2)
 local TORSO_COLOR = Color3.fromRGB(100, 100, 255) 
 local TORSO_TRANSPARENCY = 0.4           
 
@@ -44,6 +50,22 @@ end
 local function getHumanoid(character)
     if not character then return nil end
     return character:FindFirstChildOfClass("Humanoid")
+end
+
+-- ⭐️ دالة جديدة: تحديد فريق اللاعب ⭐️
+-- هاي الدالة تفحص إذا اسم اللاعب موجود داخل فولدرات الفرق
+local function getPlayerTeam(player)
+    if not player then return "None" end
+    
+    if TeamT:FindFirstChild(player.Name) then
+        return "T"
+    end
+    
+    if TeamCT:FindFirstChild(player.Name) then
+        return "CT"
+    end
+    
+    return "None"
 end
 
 -- -----------------------------
@@ -135,7 +157,7 @@ local function applyHitboxModifications(player, mode)
             part.BrickColor = BrickColor.new(color)
             part.Transparency = transparency
             part.Material = Enum.Material.Neon 
-            part.CanCollide = true -- (إصلاح تسجيل الطلقات)
+            part.CanCollide = true 
             
             local tag = Instance.new("StringValue")
             tag.Name = "UniversalHitbox"
@@ -148,6 +170,7 @@ local function applyHitboxModifications(player, mode)
 end
 
 local function restorePlayerParts(player)
+    -- هاي الدالة ترجع أجزاء اللاعب لطبيعتها
     if ModifiedPartsCache[player] then
         for _, part in ipairs(ModifiedPartsCache[player]) do
             if part and part.Parent then
@@ -170,14 +193,8 @@ end
 local function refreshAllHitboxes(mode)
     HitboxTargetPart = mode
     
-    for _, player in ipairs(Players:GetPlayers()) do 
-        if player ~= LocalPlayer and player.Character then 
-            local humanoid = getHumanoid(player.Character)
-            if humanoid and humanoid.Health > 0 then
-                 applyHitboxModifications(player, mode)
-            end
-        end 
-    end
+    -- ⭐️ تحديث: الـ Hitbox هسه يعتمد على دالة refreshESP
+    -- لذلك نحذف اللوب القديم من هنا ونخلي refreshESP تسوي الشغل
     
     -- تحديث زر التبديل
     updateToggleButton()
@@ -227,7 +244,7 @@ local function createToggleButton()
     screenGui.Name = "HitboxToggleGui"
     screenGui.Parent = playerGui
     screenGui.DisplayOrder = 99
-    screenGui.ResetOnSpawn = false -- (إصلاح الاختفاء عند الموت)
+    screenGui.ResetOnSpawn = false 
     
     toggleButton = Instance.new("TextButton")
     toggleButton.Size = UDim2.new(0, 80, 0, 30)
@@ -252,13 +269,10 @@ local function createToggleButton()
     buttonShadow.ZIndex = 1
     buttonShadow.Parent = toggleButton
     
-    -- نص الزر
     local buttonText = Instance.new("TextLabel")
     buttonText.Size = UDim2.new(1, 0, 1, 0)
     buttonText.BackgroundTransparency = 1
-    
     buttonText.Text = "Hitbox - Head"
-    
     buttonText.TextColor3 = Color3.fromRGB(255, 100, 100) 
     buttonText.Font = Enum.Font.GothamBold
     buttonText.TextSize = 12
@@ -296,7 +310,7 @@ local function updateToggleButton()
 end
 
 -- -----------------------------
--- ربط المفتاح (الطريقة الموثوقة - لا توجد GUI)
+-- ربط المفتاح
 -- -----------------------------
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
     if input.KeyCode == Enum.KeyCode.H and not gameProcessedEvent and not UserInputService:GetFocusedTextBox() then
@@ -314,7 +328,6 @@ local function setupHitDetection()
                 if hit and hit.Parent and hit.Parent:FindFirstChild("Humanoid") then
                     local hitboxTag = hit:FindFirstChild("UniversalHitbox")
                     
-                    -- (إصلاح تسجيل الضرر على كل الأجزاء)
                     if hitboxTag then
                         local hum = hit.Parent:FindFirstChild("Humanoid")
                         local player = Players:GetPlayerFromCharacter(hit.Parent)
@@ -355,6 +368,7 @@ local function isPlayerVisible(player)
 end
 
 local function destroyESPOne(player) 
+    -- هاي الدالة تنظف الـ ESP من لاعب واحد
     if ESPCache[player] then 
         for _, obj in pairs(ESPCache[player]) do 
             if obj and obj.Parent then 
@@ -365,7 +379,6 @@ local function destroyESPOne(player)
     end 
 end
 
--- ⭐️⭐️⭐️ تم التعديل هنا ⭐️⭐️⭐️
 local function createBoxESP(player, espColor) 
     local character = player.Character
     local rootPart = getRootPart(character)
@@ -389,13 +402,9 @@ local function createBoxESP(player, espColor)
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Parent = ESPFolder
     
-    -- [[ تم حذف الـ BillboardGui (الاسم) حسب طلبك ]]
-    
-    -- [[ تم تعديل الـ return ليطابق الحذف ]]
     return {Box = box, Highlight = highlight}
 end
 
--- ⭐️⭐️⭐️ وتم التعديل هنا ⭐️⭐️⭐️
 local function updateESP(espObjects, player) 
     local isVisible = isPlayerVisible(player)
     local espColor = isVisible and ESPColorVisible or ESPColorHidden
@@ -406,53 +415,87 @@ local function updateESP(espObjects, player)
         espObjects.Highlight.OutlineColor = espColor 
     end
     
-    -- [[ تم حذف كود تحديث الاسم واللون مالته ]]
-    
     local newRoot = getRootPart(player.Character)
     if newRoot then
          if espObjects.Box.Adornee ~= newRoot then espObjects.Box.Adornee = newRoot end
-         -- [[ تم حذف سطر تحديث Adornee للـ NameTag ]]
     end
 end
 
+-- -----------------------------------------------------------------
+-- ⭐️⭐️ دالة تحديث الـ ESP (معدلة بالكامل لتدعم الفرق وتنظيف الكاش) ⭐️⭐️
+-- -----------------------------------------------------------------
 local function refreshESP() 
     createESPFolder()
     
+    -- 1. تحديد فريق اللاعب المحلي
+    local localPlayerTeam = getPlayerTeam(LocalPlayer)
+    
+    -- 2. (تنظيف الكاش) - البحث عن اللاعبين الذين لم يعودوا أعداء
+    -- هاي الخطوة مهمة جداً حتى ما يصير Lag
     local playersToRemove = {}
     for player, cachedObjects in pairs(ESPCache) do 
         local humanoid = getHumanoid(player.Character)
-        if not player.Parent or not player:IsA("Player") or not humanoid or humanoid.Health <= 0 then 
+        local targetPlayerTeam = getPlayerTeam(player)
+        
+        -- اللاعب يعتبر عدو فقط إذا:
+        -- 1. موجود بالسيرفر
+        -- 2. عنده Humanoid وصحته أكثر من 0
+        -- 3. اللاعب المحلي عنده فريق ("None" ما يعتبر فريق)
+        -- 4. اللاعب المستهدف عنده فريق
+        -- 5. فريقهم مختلف
+        local isStillEnemy = player.Parent and player:IsA("Player") and humanoid and humanoid.Health > 0 and 
+                           localPlayerTeam ~= "None" and targetPlayerTeam ~= "None" and 
+                           localPlayerTeam ~= targetPlayerTeam
+        
+        if not isStillEnemy then 
+            -- إذا لم يعد عدو (مات، طلع، غير فريقه، أو إحنا صرنا بنفس الفريق)
             table.insert(playersToRemove, player)
         end 
     end
     
+    -- 3. (تنظيف الكاش) - حذف الـ ESP وإرجاع الأجزاء للاعبين المحذوفين
+    -- هاي الدالة هي اللي تمنع الـ Lag اللي ذكرته
     for _, player in ipairs(playersToRemove) do
         destroyESPOne(player)
         restorePlayerParts(player) 
     end
     
+    -- 4. (التحديث) - المرور على كل اللاعبين بالسيرفر
     for _, player in ipairs(Players:GetPlayers()) do 
-        if player ~= LocalPlayer and player.Character then 
-            local humanoid = getHumanoid(player.Character)
+        if player == LocalPlayer then continue end -- تجاهل اللاعب المحلي
+        
+        local humanoid = getHumanoid(player.Character)
+        local targetPlayerTeam = getPlayerTeam(player)
+        
+        -- تحديد إذا كان اللاعب عدو (نفس المنطق الفوق)
+        local isEnemy = player.Character and humanoid and humanoid.Health > 0 and
+                        localPlayerTeam ~= "None" and targetPlayerTeam ~= "None" and 
+                        localPlayerTeam ~= targetPlayerTeam
+        
+        if isEnemy then 
+            -- 5. (تطبيق) - إذا كان عدو، طبق الـ Hitbox والـ ESP
+            applyHitboxModifications(player, HitboxTargetPart)
             
-            if humanoid and humanoid.Health > 0 then 
-                applyHitboxModifications(player, HitboxTargetPart)
-                
-                if not ESPCache[player] then 
-                    local initialColor = ESPColorHidden
-                    local espObjects = createBoxESP(player, initialColor)
-                    if espObjects then 
-                        ESPCache[player] = espObjects 
-                    end
-                else 
-                    updateESP(ESPCache[player], player) 
-                end 
+            if not ESPCache[player] then 
+                -- إنشاء ESP جديد إذا ما كان عنده
+                local initialColor = ESPColorHidden
+                local espObjects = createBoxESP(player, initialColor)
+                if espObjects then 
+                    ESPCache[player] = espObjects 
+                end
             else 
-                restorePlayerParts(player)
+                -- تحديث الـ ESP الموجود
+                updateESP(ESPCache[player], player) 
             end 
+        else 
+            -- 6. (تجاهل) - إذا كان (نفس الفريق، ميت، ماعنده فريق)
+            -- نتأكد من إرجاع أجزاءه لوضعها الطبيعي (حتى لو ما كان عنده ESP)
+            restorePlayerParts(player)
+            -- (ملاحظة: إذا كان عنده ESP، فـ "playersToRemove" فوك هي اللي حذفته)
         end 
     end 
 end
+
 
 -- -----------------------------
 -- التشغيل الرئيسي
@@ -471,6 +514,7 @@ local function initialize()
     end)
 
     Players.PlayerRemoving:Connect(function(player)
+        -- تنظيف إضافي عند خروج اللاعب
         destroyESPOne(player)
         restorePlayerParts(player)
         
@@ -482,13 +526,16 @@ local function initialize()
         end 
     end)
 
+    -- ⭐️ استدعاء أولي لتطبيق الإعدادات
+    refreshESP()
+    -- ضبط الزر على الإعداد الافتراضي
     refreshAllHitboxes("Head") 
 
-    print("[MafiaAlJalab Universal Hitbox V11.0 - ESP No-Name Mod] Activated!")
+    print("[MafiaAlJalab Universal Hitbox V11.0 - Team-Based Mod] Activated!")
     print("✨ Initial Hitbox Mode: Head (Toggle with H)")
-    print("🖱️ Toggle Button: Created (Click to switch) - Text Fixed")
-    print("📊 ESP System: Active (No Names)")
-    print("🔫 Hit Detection: Active (Patched for all parts + CanCollide Fixed)")
+    print("🖱️ Toggle Button: Created")
+    print("📊 ESP System: Active (No Names, Team-Based, Auto-Cleaning)")
+    print("🔫 Hit Detection: Active")
 end
 
 task.wait(1)
