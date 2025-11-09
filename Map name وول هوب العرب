@@ -1,318 +1,515 @@
+-- [[ MafiaAlJalab Universal Hitbox System V11.0 - Keyboard Only (Final Reliable) ]]
+-- Hitbox محسّن لجميع اللاعبين + ESP متكامل. يعتمد فقط على Keybind H.
+-- [[ تم التعديل بواسطة Gemini - تعديل نص الزر (الأخير) ]]
+
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
-
+local UserInputService = game:GetService("UserInputService") 
 local LocalPlayer = Players.LocalPlayer
-local Backpack = LocalPlayer:WaitForChild("Backpack")
+local Camera = Workspace.CurrentCamera
 
--- الأداة المجهزة حالياً
-local EquippedTool = nil
+-- إعدادات Hitbox لجميع اللاعبين
+local HEAD_SIZE = Vector3.new(5, 5, 5)   -- حجم الرأس
+local HEAD_COLOR = Color3.fromRGB(255, 100, 100) 
+local HEAD_TRANSPARENCY = 0.5            
 
--- البحث عن أداة "كلبشه"
-local function findTool(toolName)
-    local tool = Backpack:FindFirstChild(toolName)
-    if not tool then
-        -- نحاول نلگاها بالظهر
-        tool = Backpack:WaitForChild(toolName, 5) -- انتظار 5 ثواني
-    end
-    return tool
+local TORSO_SIZE = Vector3.new(4, 5, 2)   -- حجم الصدر
+local TORSO_COLOR = Color3.fromRGB(100, 100, 255) 
+local TORSO_TRANSPARENCY = 0.4           
+
+-- المتغيرات الرئيسية
+local HitboxTargetPart = "Head" 
+local KeybindCooldown = 0.5 
+local LastToggleTime = 0 
+
+-- إعدادات ESP
+local ESPColorVisible = Color3.fromRGB(100, 255, 150) 
+local ESPColorHidden = Color3.fromRGB(255, 80, 80)    
+
+-- الكاشات
+local ESPCache = {} 
+local ESPFolder = nil
+local ModifiedPartsCache = {} 
+local ESPUPDATEINTERVAL = 0.1
+
+-- -----------------------------
+-- دوال مساعدة
+-- -----------------------------
+local function getRootPart(character)
+    if not character then return nil end
+    return character:FindFirstChild("HumanoidRootPart")
 end
 
--- الحصول على الأداة إذا كانت باليد
-local function getEquippedTool()
-    if LocalPlayer.Character then
-        for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
-            if item:IsA("Tool") and item.Name:lower():find("كلبشه") then
-                return item
+local function getHumanoid(character)
+    if not character then return nil end
+    return character:FindFirstChildOfClass("Humanoid")
+end
+
+-- -----------------------------
+-- دالة عرض الرسالة (تم تبسيطها)
+-- -----------------------------
+local function showNotification(text)
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    if playerGui:FindFirstChild("HitboxNotificationGui") then 
+        playerGui:FindFirstChild("HitboxNotificationGui"):Destroy() 
+    end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "HitboxNotificationGui"
+    screenGui.Parent = playerGui
+    screenGui.DisplayOrder = 100 
+    screenGui.ResetOnSpawn = false
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.3, 0, 0, 40) 
+    frame.Position = UDim2.new(0, 10, 0, 50) 
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30) 
+    frame.BackgroundTransparency = 0.5 
+    frame.BorderSizePixel = 0
+    frame.Parent = screenGui
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = text
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.TextSize = 16
+    textLabel.Parent = frame
+    
+    game:GetService("Debris"):AddItem(screenGui, 2.5)
+end
+
+-- -----------------------------
+-- دوال Hitbox 
+-- -----------------------------
+local function getPartsToModify(character, mode)
+    if mode == "Head" then
+        return {character:FindFirstChild("Head")}
+    elseif mode == "Torso" then
+        return {character:FindFirstChild("UpperTorso"), character:FindFirstChild("LowerTorso")}
+    end
+    return {}
+end
+
+local function applyHitboxModifications(player, mode)
+    if player == LocalPlayer then return end
+    
+    local character = player.Character
+    if not character then return end
+    
+    if ModifiedPartsCache[player] then
+        for _, part in ipairs(ModifiedPartsCache[player]) do
+            local tag = part:FindFirstChild("UniversalHitbox")
+            if tag then
+                part.Size = part.Name == "Head" and Vector3.new(2, 1, 1) or Vector3.new(2, 2, 1)
+                part.BrickColor = BrickColor.new("Bright yellow") 
+                part.Transparency = 0
+                part.Material = Enum.Material.Plastic
+                part.CanCollide = true
+                tag:Destroy()
             end
         end
+        ModifiedPartsCache[player] = nil
     end
-    return nil
+
+    local partsToModify = getPartsToModify(character, mode)
+    ModifiedPartsCache[player] = {}
+
+    for _, part in ipairs(partsToModify) do
+        if part and part:IsA("BasePart") then
+            
+            local size, color, transparency
+            if mode == "Head" then
+                size = HEAD_SIZE
+                color = HEAD_COLOR
+                transparency = HEAD_TRANSPARENCY
+            elseif mode == "Torso" then
+                size = TORSO_SIZE
+                color = TORSO_COLOR
+                transparency = TORSO_TRANSPARENCY
+            end
+            
+            part.Size = size
+            part.BrickColor = BrickColor.new(color)
+            part.Transparency = transparency
+            part.Material = Enum.Material.Neon 
+            part.CanCollide = true -- (إصلاح تسجيل الطلقات)
+            
+            local tag = Instance.new("StringValue")
+            tag.Name = "UniversalHitbox"
+            tag.Value = mode 
+            tag.Parent = part
+            
+            table.insert(ModifiedPartsCache[player], part)
+        end
+    end
 end
 
--- التأكد من تجهيز الأداة
-local function ensureToolEquipped()
-    local tool = getEquippedTool()
-    if tool then
-        EquippedTool = tool
-        return true
-    end
-    
-    local backpackTool = findTool("كلبشه")
-    if backpackTool and LocalPlayer.Character then
-        LocalPlayer.Character:WaitForChild("Humanoid"):EquipTool(backpackTool)
-        EquippedTool = backpackTool
-        return true
-    end
-    
-    EquippedTool = nil
-    return false
-end
-
-local bodyParts = {
-    "Head", "HumanoidRootPart", "LeftUpperArm", "RightUpperArm",
-    "LeftLowerArm", "RightLowerArm", "LeftUpperLeg", "RightUpperLeg",
-    "LeftLowerLeg", "RightLowerLeg", "Torso"
-}
-
--- تخزين اللاعبين المقيدين
-local cuffedPlayers = {}
-local nextIndex = 1
-
--- تقييد (كلبشة) اللاعب
-local function cuffPlayer(player)
-    if player and player.Character and ensureToolEquipped() and EquippedTool then
-        local remoteEvent = EquippedTool:FindFirstChild("RemoteEvent")
-        if not remoteEvent then warn("ما لگينا RemoteEvent بالأداة"); return false end
-
-        for _, partName in pairs(bodyParts) do
-            local part = player.Character:FindFirstChild(partName)
-            if part then
-                remoteEvent:FireServer("Cuff", part)
-                wait(0.05)
+local function restorePlayerParts(player)
+    if ModifiedPartsCache[player] then
+        for _, part in ipairs(ModifiedPartsCache[player]) do
+            if part and part.Parent then
+                part.Size = part.Name == "Head" and Vector3.new(2, 1, 1) or Vector3.new(2, 2, 1)
+                part.BrickColor = BrickColor.new("Bright yellow") 
+                part.Transparency = 0
+                part.Material = Enum.Material.Plastic
+                part.CanCollide = true
+                
+                local tag = part:FindFirstChild("UniversalHitbox")
+                if tag then
+                    tag:Destroy()
+                end
             end
         end
-        return true
+        ModifiedPartsCache[player] = nil
     end
-    return false
 end
 
--- تحرير اللاعب
-local function uncuffPlayer(player)
-    if player and player.Character and ensureToolEquipped() and EquippedTool then
-        local remoteEvent = EquippedTool:FindFirstChild("RemoteEvent")
-        if remoteEvent then
-            remoteEvent:FireServer("UnCuff", player.Character)
-            return true
-        else
-            warn("ما لگينا RemoteEvent بالأداة")
-        end
-    end
-    return false
-end
-
--- بناء واجهة المستخدم (GUI)
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MOGGEDCuffControl"
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-ScreenGui.ResetOnSpawn = false
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 220, 0, 160)
-MainFrame.Position = UDim2.new(1, -230, 0, 10)
-MainFrame.AnchorPoint = Vector2.new(1, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.Parent = ScreenGui
-
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 10)
-UICorner.Parent = MainFrame
-
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 32)
-TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-TitleBar.BorderSizePixel = 0
-TitleBar.Parent = MainFrame
-
-local TitleCorner = Instance.new("UICorner")
-TitleCorner.CornerRadius = UDim.new(0, 10)
-TitleCorner.Parent = TitleBar
-
-local TitleText = Instance.new("TextLabel")
-TitleText.Size = UDim2.new(1, -40, 1, 0)
-TitleText.Position = UDim2.new(0, 10, 0, 0)
-TitleText.BackgroundTransparency = 1
-TitleText.Text = "**MOGGED🏴‍☠️ - تحكم الكلبشه**"
-TitleText.TextColor3 = Color3.fromRGB(220, 220, 220)
-TitleText.TextSize = 14
-TitleText.Font = Enum.Font.GothamBold
-TitleText.TextXAlignment = Enum.TextXAlignment.Left
-TitleText.Parent = TitleBar
-
-local CloseButton = Instance.new("TextButton")
-CloseButton.Size = UDim2.new(0, 30, 1, 0)
-CloseButton.Position = UDim2.new(1, -30, 0, 0)
-CloseButton.BackgroundTransparency = 1
-CloseButton.Text = "X"
-CloseButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-CloseButton.TextSize = 16
-CloseButton.Font = Enum.Font.GothamBold
-CloseButton.Parent = TitleBar
-
-local CuffButton = Instance.new("TextButton")
-CuffButton.Size = UDim2.new(0.85, 0, 0, 40)
-CuffButton.Position = UDim2.new(0.075, 0, 0.25, 0)
-CuffButton.Text = "**تقييد اللاعب**"
-CuffButton.BackgroundColor3 = Color3.fromRGB(0, 100, 255)
-CuffButton.TextColor3 = Color3.new(1, 1, 1)
-CuffButton.TextSize = 14
-CuffButton.Font = Enum.Font.GothamBold
-CuffButton.Parent = MainFrame
-
-local CuffCorner = Instance.new("UICorner")
-CuffCorner.CornerRadius = UDim.new(0, 8)
-CuffCorner.Parent = CuffButton
-
-local UnCuffButton = Instance.new("TextButton")
-UnCuffButton.Size = UDim2.new(0.85, 0, 0, 40)
-UnCuffButton.Position = UDim2.new(0.075, 0, 0.6, 0)
-UnCuffButton.Text = "**تحرير اللاعب**"
-UnCuffButton.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
-UnCuffButton.TextColor3 = Color3.new(1, 1, 1)
-UnCuffButton.TextSize = 14
-UnCuffButton.Font = Enum.Font.GothamBold
-UnCuffButton.Parent = MainFrame
-
-local UnCuffCorner = Instance.new("UICorner")
-UnCuffCorner.CornerRadius = UDim.new(0, 8)
-UnCuffCorner.Parent = UnCuffButton
-
-local TargetLabel = Instance.new("TextLabel")
-TargetLabel.Size = UDim2.new(1, -20, 0, 20)
-TargetLabel.Position = UDim2.new(0, 10, 0, 35)
-TargetLabel.BackgroundTransparency = 1
-TargetLabel.Text = "اللاعب المستهدف: لا أحد"
-TargetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-TargetLabel.TextSize = 12
-TargetLabel.Font = Enum.Font.Gotham
-TargetLabel.Parent = MainFrame
-
-local ToolStatusLabel = Instance.new("TextLabel")
-ToolStatusLabel.Size = UDim2.new(1, -20, 0, 20)
-ToolStatusLabel.Position = UDim2.new(0, 10, 0, 100)
-ToolStatusLabel.BackgroundTransparency = 1
-ToolStatusLabel.Text = "حالة الأداة: جاهزة"
-ToolStatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-ToolStatusLabel.TextSize = 12
-ToolStatusLabel.Font = Enum.Font.Gotham
-ToolStatusLabel.Parent = MainFrame
-
--- تأثيرات الحركات (Hover Effects)
-local function createHoverEffect(button, normalColor, hoverColor)
-    button.MouseEnter:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = hoverColor}):Play()
-    end)
-    button.MouseLeave:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = normalColor}):Play()
-    end)
-end
-
-createHoverEffect(CuffButton, Color3.fromRGB(0, 100, 255), Color3.fromRGB(20, 120, 255))
-createHoverEffect(UnCuffButton, Color3.fromRGB(220, 60, 60), Color3.fromRGB(240, 70, 70))
-
--- وظيفة الحصول على اللاعب التالي
-local function getNextPlayer()
-    local allPlayers = {}
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            table.insert(allPlayers, player)
-        end
+local function refreshAllHitboxes(mode)
+    HitboxTargetPart = mode
+    
+    for _, player in ipairs(Players:GetPlayers()) do 
+        if player ~= LocalPlayer and player.Character then 
+            local humanoid = getHumanoid(player.Character)
+            if humanoid and humanoid.Health > 0 then
+                 applyHitboxModifications(player, mode)
+            end
+        end 
     end
     
-    if #allPlayers == 0 then return nil end
+    -- تحديث زر التبديل
+    updateToggleButton()
     
-    local target = allPlayers[nextIndex]
-    nextIndex = nextIndex % #allPlayers + 1
-    return target
+    local message
+    if mode == "Head" then
+        message = "تم تبديل Hitbox\n-Head-"
+    elseif mode == "Torso" then
+        message = "تم تبديل Hitbox\n-Torso-"
+    end
+    showNotification(message)
+    print("✨ Hitbox Mode Switched To: " .. mode .. " (Keybind: H)")
 end
 
--- وظيفة تحديث مؤشر اللاعب المستهدف
-local function updateTargetLabel()
-    local target = getNextPlayer()
-    TargetLabel.Text = "اللاعب المستهدف: " .. (target and target.Name or "لا أحد")
-end
-
--- وظيفة تحديث حالة الأداة
-local function updateToolStatus(text, color)
-    ToolStatusLabel.Text = "حالة الأداة: " .. text
-    ToolStatusLabel.TextColor3 = color
-end
-
--- النقر على زر التقييد
-CuffButton.MouseButton1Click:Connect(function()
-    local target = getNextPlayer()
-    if not target then return end
+-- -----------------------------
+-- نظام التبديل الرئيسي
+-- -----------------------------
+local function toggleHitboxMode()
+    local currentTime = tick()
     
-    if ensureToolEquipped() then
-        updateToolStatus("قيد الاستخدام", Color3.fromRGB(255, 200, 0))
-        
-        if cuffPlayer(target) then
-            cuffedPlayers[target] = true
-            updateTargetLabel()
-            
-            local originalColor = CuffButton.BackgroundColor3
-            TweenService:Create(CuffButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 200, 0)}):Play()
-            delay(0.3, function()
-                TweenService:Create(CuffButton, TweenInfo.new(0.2), {BackgroundColor3 = originalColor}):Play()
-            end)
-            
-            updateToolStatus("جاهزة", Color3.fromRGB(0, 200, 0))
-        else
-            updateToolStatus("فشل في التقييد", Color3.fromRGB(255, 0, 0))
-        end
+    if currentTime - LastToggleTime < KeybindCooldown then
+        return 
+    end
+    
+    if HitboxTargetPart == "Head" then
+        refreshAllHitboxes("Torso") 
     else
-        updateToolStatus("غير متوفرة", Color3.fromRGB(255, 0, 0))
+        refreshAllHitboxes("Head")
     end
-end)
+    
+    LastToggleTime = currentTime
+end
 
--- النقر على زر التحرير
-UnCuffButton.MouseButton1Click:Connect(function()
-    if ensureToolEquipped() then
-        updateToolStatus("قيد الاستخدام", Color3.fromRGB(255, 200, 0))
-        
-        for player, _ in pairs(cuffedPlayers) do
-            if uncuffPlayer(player) then
-                cuffedPlayers[player] = nil
-                
-                local originalColor = UnCuffButton.BackgroundColor3
-                TweenService:Create(UnCuffButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 200, 0)}):Play()
-                delay(0.3, function()
-                    TweenService:Create(UnCuffButton, TweenInfo.new(0.2), {BackgroundColor3 = originalColor}):Play()
-                end)
-                
-                updateToolStatus("جاهزة", Color3.fromRGB(0, 200, 0))
-                break
+-- -----------------------------
+-- إنشاء زر التبديل على الشاشة
+-- -----------------------------
+local toggleButton = nil
+
+local function createToggleButton()
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    
+    if playerGui:FindFirstChild("HitboxToggleGui") then 
+        playerGui:FindFirstChild("HitboxToggleGui"):Destroy() 
+    end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "HitboxToggleGui"
+    screenGui.Parent = playerGui
+    screenGui.DisplayOrder = 99
+    screenGui.ResetOnSpawn = false -- (إصلاح الاختفاء عند الموت)
+    
+    toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0, 80, 0, 30)
+    toggleButton.Position = UDim2.new(0, 10, 0, 100) 
+    toggleButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    toggleButton.BackgroundTransparency = 0.3
+    toggleButton.BorderSizePixel = 1
+    toggleButton.BorderColor3 = Color3.fromRGB(100, 100, 100)
+    toggleButton.Text = ""
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.TextSize = 12
+    toggleButton.ZIndex = 2
+    toggleButton.Parent = screenGui
+    
+    local buttonShadow = Instance.new("Frame")
+    buttonShadow.Size = UDim2.new(1, 4, 1, 4)
+    buttonShadow.Position = UDim2.new(0, -2, 0, -2)
+    buttonShadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    buttonShadow.BackgroundTransparency = 0.7
+    buttonShadow.BorderSizePixel = 0
+    buttonShadow.ZIndex = 1
+    buttonShadow.Parent = toggleButton
+    
+    -- نص الزر
+    local buttonText = Instance.new("TextLabel")
+    buttonText.Size = UDim2.new(1, 0, 1, 0)
+    buttonText.BackgroundTransparency = 1
+    
+    -- [[ ⭐️⭐️ التعديل الرابع: تغيير النص الأولي للزر ⭐️⭐️ ]]
+    buttonText.Text = "Hitbox - Head"
+    
+    buttonText.TextColor3 = Color3.fromRGB(255, 100, 100) 
+    buttonText.Font = Enum.Font.GothamBold
+    buttonText.TextSize = 12
+    buttonText.ZIndex = 3
+    buttonText.Parent = toggleButton
+    
+    toggleButton.MouseButton1Click:Connect(function()
+        toggleHitboxMode()
+    end)
+    
+    toggleButton.MouseEnter:Connect(function()
+        toggleButton.BackgroundTransparency = 0.1
+    end)
+    
+    toggleButton.MouseLeave:Connect(function()
+        toggleButton.BackgroundTransparency = 0.3
+    end)
+end
+
+-- دالة تحديث نص ولون الزر
+local function updateToggleButton()
+    if toggleButton then
+        local textLabel = toggleButton:FindFirstChildOfClass("TextLabel")
+        if textLabel then
+            
+            -- [[ ⭐️⭐️ التعديل الرابع: تغيير نص الزر عند التبديل ⭐️⭐️ ]]
+            if HitboxTargetPart == "Head" then
+                textLabel.Text = "Hitbox - Head"
+                textLabel.TextColor3 = Color3.fromRGB(255, 100, 100) -- أحمر
             else
-                updateToolStatus("فشل في التحرير", Color3.fromRGB(255, 0, 0))
+                textLabel.Text = "Hitbox - Torso"
+                textLabel.TextColor3 = Color3.fromRGB(100, 100, 255) -- أزرق
             end
-        end
-    else
-        updateToolStatus("غير متوفرة", Color3.fromRGB(255, 0, 0))
-    end
-    updateTargetLabel()
-end)
-
--- زر الإغلاق
-CloseButton.MouseButton1Click:Connect(function()
-    ScreenGui:Destroy()
-end)
-
--- تحديث اللاعبين
-Players.PlayerAdded:Connect(updateTargetLabel)
-Players.PlayerRemoving:Connect(updateTargetLabel)
-
--- التحقق من توفر الأداة بشكل دوري
-local function checkToolAvailability()
-    if not EquippedTool or not EquippedTool.Parent then
-        if ensureToolEquipped() then
-            updateToolStatus("جاهزة", Color3.fromRGB(0, 200, 0))
-        else
-            updateToolStatus("غير متوفرة", Color3.fromRGB(255, 0, 0))
         end
     end
 end
 
--- التهيئة
-updateTargetLabel()
-checkToolAvailability()
-
--- حلقة التحقق الدورية
-spawn(function()
-    while wait(3) do
-        checkToolAvailability()
+-- -----------------------------
+-- ربط المفتاح (الطريقة الموثوقة - لا توجد GUI)
+-- -----------------------------
+UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+    if input.KeyCode == Enum.KeyCode.H and not gameProcessedEvent and not UserInputService:GetFocusedTextBox() then
+        toggleHitboxMode()
     end
 end)
+
+-- -----------------------------
+-- دوال ESP و Hit Detection
+-- -----------------------------
+local function setupHitDetection()
+    Workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Part") and obj.Name == "Bullet" then
+            obj.Touched:Connect(function(hit)
+                if hit and hit.Parent and hit.Parent:FindFirstChild("Humanoid") then
+                    local hitboxTag = hit:FindFirstChild("UniversalHitbox")
+                    
+                    -- (إصلاح تسجيل الضرر على كل الأجزاء)
+                    if hitboxTag then
+                        local hum = hit.Parent:FindFirstChild("Humanoid")
+                        local player = Players:GetPlayerFromCharacter(hit.Parent)
+                        
+                        if player and player ~= LocalPlayer then
+                            hum:TakeDamage(100)
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+local function createESPFolder() 
+    if not ESPFolder or not ESPFolder.Parent then 
+        ESPFolder = Instance.new("Folder")
+        ESPFolder.Name = "MafiaAlJalabUniversalHitbox_V11"
+        ESPFolder.Parent = Camera
+    end 
+end
+
+local function isPlayerVisible(player) 
+    local localChar = LocalPlayer.Character
+    local targetChar = player.Character
+    local localRoot = getRootPart(localChar)
+    local targetRoot = getRootPart(targetChar)
+    if not localRoot or not targetRoot then return false end
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {localChar, targetChar}
+    
+    local direction = targetRoot.Position - localRoot.Position
+    local raycastResult = Workspace:Raycast(localRoot.Position, direction, raycastParams)
+    
+    return not raycastResult
+end
+
+local function destroyESPOne(player) 
+    if ESPCache[player] then 
+        for _, obj in pairs(ESPCache[player]) do 
+            if obj and obj.Parent then 
+                obj:Destroy() 
+            end 
+        end
+        ESPCache[player] = nil 
+    end 
+end
+
+local function createBoxESP(player, espColor) 
+    local character = player.Character
+    local rootPart = getRootPart(character)
+    if not rootPart then return nil end
+    
+    local box = Instance.new("BoxHandleAdornment")
+    box.Adornee = rootPart
+    box.AlwaysOnTop = true
+    box.Size = Vector3.new(2.5, 5, 1.5)
+    box.Color3 = espColor
+    box.Transparency = 0.7
+    box.ZIndex = 3
+    box.Parent = ESPFolder
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = character
+    highlight.FillColor = espColor
+    highlight.FillTransparency = 0.8
+    highlight.OutlineColor = espColor
+    highlight.OutlineTransparency = 0.5
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = ESPFolder
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = rootPart
+    billboard.Size = UDim2.new(0, 150, 0, 20) 
+    billboard.AlwaysOnTop = true
+    billboard.StudsOffset = Vector3.new(0, 3.5, 0) 
+    billboard.Parent = ESPFolder
+    
+    local nameLabel = Instance.new("TextLabel", billboard)
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = player.Name .. " [HITBOX - " .. HitboxTargetPart:upper() .. "]" 
+    nameLabel.TextColor3 = espColor
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 14
+    nameLabel.TextStrokeTransparency = 0.5
+    
+    return {Box = box, Highlight = highlight, NameTag = billboard, Label = nameLabel}
+end
+
+local function updateESP(espObjects, player) 
+    local isVisible = isPlayerVisible(player)
+    local espColor = isVisible and ESPColorVisible or ESPColorHidden
+    
+    if espObjects.Box and espObjects.Box.Parent then espObjects.Box.Color3 = espColor end
+    if espObjects.Highlight and espObjects.Highlight.Parent then 
+        espObjects.Highlight.FillColor = espColor
+        espObjects.Highlight.OutlineColor = espColor 
+    end
+    
+    if espObjects.Label and espObjects.Label.Parent then
+        espObjects.Label.TextColor3 = espColor
+        
+        -- [[ ⭐️⭐️ التعديل الرابع: تغيير نص الـ ESP (اختياري بس أفضل) ⭐️⭐️ ]]
+        -- هذا يخلي علامة الـ ESP هم تتغير ويا الزر
+        local currentModeText = HitboxTargetPart == "Head" and "HEAD" or "TORSO"
+        espObjects.Label.Text = player.Name .. " [HITBOX - " .. currentModeText .. "]" 
+    end
+    
+    local newRoot = getRootPart(player.Character)
+    if newRoot then
+         if espObjects.Box.Adornee ~= newRoot then espObjects.Box.Adornee = newRoot end
+         if espObjects.NameTag.Adornee ~= newRoot then espObjects.NameTag.Adornee = newRoot end
+    end
+end
+
+local function refreshESP() 
+    createESPFolder()
+    
+    local playersToRemove = {}
+    for player, cachedObjects in pairs(ESPCache) do 
+        local humanoid = getHumanoid(player.Character)
+        if not player.Parent or not player:IsA("Player") or not humanoid or humanoid.Health <= 0 then 
+            table.insert(playersToRemove, player)
+        end 
+    end
+    
+    for _, player in ipairs(playersToRemove) do
+        destroyESPOne(player)
+        restorePlayerParts(player) 
+    end
+    
+    for _, player in ipairs(Players:GetPlayers()) do 
+        if player ~= LocalPlayer and player.Character then 
+            local humanoid = getHumanoid(player.Character)
+            
+            if humanoid and humanoid.Health > 0 then 
+                applyHitboxModifications(player, HitboxTargetPart)
+                
+                if not ESPCache[player] then 
+                    local initialColor = ESPColorHidden
+                    local espObjects = createBoxESP(player, initialColor)
+                    if espObjects then 
+                        ESPCache[player] = espObjects 
+                    end
+                else 
+                    updateESP(ESPCache[player], player) 
+                end 
+            else 
+                restorePlayerParts(player)
+            end 
+        end 
+    end 
+end
+
+-- -----------------------------
+-- التشغيل الرئيسي
+-- -----------------------------
+local lastESPUpdate = 0
+
+local function initialize()
+    setupHitDetection()
+    createToggleButton()
+    
+    RunService.Heartbeat:Connect(function() 
+        if tick() - lastESPUpdate > ESPUPDATEINTERVAL then 
+            refreshESP()
+            lastESPUpdate = tick() 
+        end 
+    end)
+
+    Players.PlayerRemoving:Connect(function(player)
+        destroyESPOne(player)
+        restorePlayerParts(player)
+        
+        if player == LocalPlayer and ESPFolder then 
+            ESPFolder:Destroy() 
+            for otherPlayer, _ in pairs(ModifiedPartsCache) do
+                restorePlayerParts(otherPlayer)
+            end
+        end 
+    end)
+
+    refreshAllHitboxes("Head") 
+
+    print("[MafiaAlJalab Universal Hitbox V11.0 - Final Patch] Activated Successfully!")
+    print("✨ Initial Hitbox Mode: Head (Toggle with H)")
+    print("🖱️ Toggle Button: Created (Click to switch) - Text Fixed")
+    print("📊 ESP System: Active")
+    print("🔫 Hit Detection: Active (Patched for all parts + CanCollide Fixed)")
+end
+
+task.wait(1)
+initialize()
