@@ -20,7 +20,8 @@ local HEAD_SIZE = Vector3.new(5, 5, 5)
 local HEAD_COLOR = Color3.fromRGB(255, 100, 100) 
 local HEAD_TRANSPARENCY = 0.5            
 
-local TORSO_SIZE = Vector3.new(4, 5, 2)
+-- 🔴🔴 التعديل صار هنا: تم تكبير أبعاد الـ Torso 🔴🔴
+local TORSO_SIZE = Vector3.new(6, 6, 4) -- كانت (4, 5, 2)
 local TORSO_COLOR = Color3.fromRGB(100, 100, 255) 
 local TORSO_TRANSPARENCY = 0.4           
 
@@ -286,7 +287,6 @@ local function createToggleButton()
     toggleButton.MouseEnter:Connect(function()
         toggleButton.BackgroundTransparency = 0.1
     end)
-    
     toggleButton.MouseLeave:Connect(function()
         toggleButton.BackgroundTransparency = 0.3
     end)
